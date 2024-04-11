@@ -1,0 +1,743 @@
+---
+title: 'Analyses statistiques : Lauranne Pouliot <br><br>'
+author: "Numéro de référence : 1027 <br><br> Par : Samuel Lemaire-Paquette, statisticien"
+date: ' Dernière mise à jour : `r Sys.Date()`<br><br>'
+output:
+  html_document:
+    theme: united
+    df_print: paged
+    toc: true
+    number_sections: false
+  pdf_document:
+    toc: true
+subtitle: "Projet : DIVE - Carbon <br>"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE}
+# Define variable containing url
+url <- "https://www.crchus.ca/clients/SanteEstrie/Sous-sites/Centres_de_recherche/CRCHUS/Medias-publications/signature_CR-CHUS_rvb-s2.jpg"
+```
+
+<script>
+   $(document).ready(function() {
+     $head = $('#header');
+     $head.prepend('<img src="`r url`" style=\"float: right;width: 200px;\"/>')
+   });
+</script>
+
+<style>
+body {
+text-align: justify}
+</style>
+
+<style type="text/css">
+  body{
+  font-size: 12pt;
+}
+</style>
+
+<style type="text/css">
+.main-container {
+  max-width: 1600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+
+```{r Packages setup, include = FALSE}
+
+Packages <- c( "readxl","haven","ggplot2","dplyr","MASS","summarytools","car","lme4","lmerTest","nlme","multcomp","emmeans","ggeffects","ggiraphExtra","sjPlot","sjmisc","qwraps2","extrafont","openxlsx","igraph","gimme","purrr","ggthemes","plotly","dataxray","knitr","gmodels","tidyverse","infer","skimr","pander", "RColorBrewer","expss","lmerTest","boot")
+
+lapply(Packages, library, character.only = T)
+
+options(scipen=10)
+
+```
+
+```{r Data import, include = FALSE}
+
+Data.socio <- read_excel("2024_03_23_DataClean.xlsx", sheet = "SocioDemo")
+Data.inh <- read_excel("2024_03_23_DataClean.xlsx", sheet = "Inhalateur")
+Data.carbon <- read_excel("2024_03_23_DataClean.xlsx", sheet = "Carbon")
+
+Data.socio <- Data.socio %>%
+  filter(ID != 30)
+
+Data.inh <- Data.inh %>%
+  filter(ID != 30)
+
+```
+
+```{r New variable, include = FALSE}
+
+Data.socio <- Data.socio %>%
+  group_by(ID) %>%
+  mutate( Asthma = ifelse(ea_dp_20<= 200,1,0),
+          StrataT2 = ifelse( ea_feno_niox < 25 & ea_fsc_eos_val < 0.15,0,1),
+          his_crise_severe = ifelse( is.na(his_crise_corti)==T,NA, sum(his_crise_corti,his_crise_combi, na.rm=T)              ))
+
+Data.inh.long <- reshape(transform(Data.inh, idnew = seq_along(ID)), varying=list(c("Rx1","Rx2","Rx3","Rx4"),
+                                   c("Nbr_Rx1","Nbr_Rx2","Nbr_Rx3","Nbr_Rx4")),
+                 direction="long", timevar="Time", idvar=c("idnew"),
+                 v.names=c("Brand_name", "Nbr_Rx")) 
+
+Data.inh.long <- merge( Data.inh.long, Data.carbon, by = "Brand_name", all.x = T  )
+
+Data.inh.long <- Data.inh.long %>%
+  filter(is.na(Brand_name)==F)%>%
+     group_by(ID) %>%
+     mutate(Nbr_renouvellement_total = sum(Nbr_Rx,na.rm=T))
+
+Data.inh.long <- Data.inh.long %>%
+     group_by(ID,Time) %>%
+     mutate(Total_empreinte_carbon = (Nbr_Rx*gCO2e),
+            Total_empreinte_carbon_v2 = (Nbr_Rx*gCO2e_v2)) 
+  
+Data.inh.long <- Data.inh.long %>%
+      group_by(ID) %>%
+      summarise( Nbr_renouvellement_total = first(Nbr_renouvellement_total,na.rm=T),
+                 Total_empreinte_carbon = sum(Total_empreinte_carbon,na.rm=T),
+                 Total_empreinte_carbon_v2 = sum(Total_empreinte_carbon_v2,na.rm=T))
+
+Data.socio <- merge(Data.socio,Data.inh.long, by= "ID",all.x = T )
+
+Data.socio$Nbr_renouvellement_total <- ifelse( is.na(Data.socio$Nbr_renouvellement_total)==T,0,Data.socio$Nbr_renouvellement_total    )
+
+Data.socio$Total_empreinte_carbon <- ifelse( is.na(Data.socio$Total_empreinte_carbon)==T,0,Data.socio$Total_empreinte_carbon    )
+
+Data.socio$Total_empreinte_carbon_v2 <- ifelse( is.na(Data.socio$Total_empreinte_carbon_v2)==T,0,Data.socio$Total_empreinte_carbon_v2    )
+
+Data.socio <- Data.socio %>%
+  group_by(ID) %>%
+  mutate( Nbr_renouvellement_total_annual = ((Nbr_renouvellement_total*365.25)/part_del_cp20)  ,
+          Total_empreinte_carbon_annual =  ((Total_empreinte_carbon*365.25)/part_del_cp20),
+          Total_empreinte_carbon_annual_v2 =  ((Total_empreinte_carbon_v2*365.25)/part_del_cp20), )
+
+```
+
+```{r recoding, include = FALSE}
+
+val_lab(Data.socio$Asthma) <- make_labels("
+             0 Non-asthma 
+             1 Asthma     ") 
+
+Data.socio$Asthma <- as.factor(Data.socio$Asthma)
+
+val_lab(Data.socio$StrataT2) <- make_labels("
+             0 T2-Low
+             1 T2-High      ") 
+
+Data.socio$StrataT2 <- as.factor(Data.socio$StrataT2)
+
+val_lab(Data.socio$part_sexe) <- make_labels("
+             1 Femme
+             2 Homme       ") 
+
+Data.socio$part_sexe <- as.factor(Data.socio$part_sexe)
+
+val_lab(Data.socio$consom_tabac) <- make_labels("
+             1  Fumeur
+             2  Non-fumeur
+             3  Ex-fumeur
+             4  Tabagisme passif   ") 
+
+Data.socio$consom_tabac <- as.factor(Data.socio$consom_tabac)
+
+val_lab(Data.socio$ea_diag) <- make_labels("
+             0 Non
+             1 Oui        ") 
+
+Data.socio$ea_diag <- as.factor(Data.socio$ea_diag)
+
+val_lab(Data.socio$his_diag_enf) <- make_labels("
+             0 Non
+             1 Oui        ") 
+
+Data.socio$his_diag_enf <- as.factor(Data.socio$his_diag_enf)
+
+
+val_lab(Data.socio$his_crises) <- make_labels("
+             0 Non
+             1 Oui        ") 
+
+Data.socio$his_crises <- as.factor(Data.socio$his_crises)
+
+```
+
+# Statistique descriptive - Sociodémo {.tabset}
+
+**Instructions pour les tableaux :**
+
+Les statistiques descriptives sont présentées dans les tableaux. L'ensemble des informations pertinentes devraient se trouver à l'intérieur.
+
+* Type : Type de variable (Continu ou nominal)
+* Name-Label : Nom de la variable.  
+* Observed : Nombre de patients avec une valeur non-manquante.
+* Missing : Nombre de patients avec une valeur manquante.
+* Distinct : Nombre de modalités (valeurs observées) différentes dans la variable.
+* Figure : Distribution de la variable. 
+
+Pour accéder à l'information, cliquer sur l'icône "Expand/collapse all". Les informations descriptives devraient apparaître sous chaque variable. Les fréquences et pourcentages de chaque modalité seront présentés pour les variables nominales. Les moyennes et les écart-types (GMD = forme robuste d'écart-type) et les médianes [écart-interquartiles] sont présentés pour les variables continues. Il est recommandé d'évaluer visuellement la normalité à l'aide de l'histogramme au bout de la rangée. Si on semble observer une distribution normale, il est recommandé de présenter Moyenne(GMD), sinon median[$Q_{25}$-$Q_{75}$].
+
+## Échantillon complet (n = 53)
+
+```{r , echo=FALSE}
+
+Data.socio[,c(5,23,3,4,6,7,14,15,16,24,19,20,13,21,8,2,22,9,10,11)] %>%
+  dataxray::make_xray() %>%
+  dataxray::view_xray(elementId = 1)
+
+```
+
+## Selon le groupe (Asthme n = 10; Non-asthme n = 43)
+
+```{r , echo=FALSE}
+
+Data.socio[,c(22,5,23,3,4,6,7,14,15,16,24,19,20,13,21,8,2,9,10,11)] %>%
+  dataxray::make_xray(by = "Asthma") %>%
+  dataxray::view_xray(elementId = 2)
+
+```
+
+
+# Comparaison des groupes
+
+**Âge (p = 0.122)**
+
+```{r , echo=FALSE}
+
+wilcox.test(part_age ~ Asthma, data = Data.socio)
+
+```
+
+**IMC (p = 0.865)**
+
+```{r , echo=FALSE}
+
+wilcox.test(part_imc ~ Asthma, data = Data.socio)
+
+```
+
+**Sexe (p = 1)**
+
+```{r , echo=FALSE}
+
+CrossTable(Data.socio$Asthma, Data.socio$part_sexe,fisher = T)
+
+```
+
+**Tabagisme (p = 0.08)**
+
+```{r , echo=FALSE}
+
+CrossTable(Data.socio$Asthma, Data.socio$consom_tabac,fisher = T)
+
+```
+
+**VEMS observée pré-BD % (p = 0.031 )**
+
+```{r , echo=FALSE}
+
+wilcox.test(fp_vems_obs_pre_pour ~ Asthma, data = Data.socio)
+
+```
+
+**VEMS/CVF observée pré-BD (p = 0.568)**
+
+```{r , echo=FALSE}
+
+wilcox.test(fp_vems_cvf_obs_pre ~ Asthma, data = Data.socio)
+
+```
+
+**FeNO (p = 0.014)**
+
+```{r , echo=FALSE}
+
+wilcox.test(ea_feno_niox ~ Asthma, data = Data.socio)
+
+```
+
+**Eos (p = 0.039)**
+
+```{r , echo=FALSE}
+
+wilcox.test(ea_fsc_eos_val ~ Asthma, data = Data.socio)
+
+```
+
+**Score ACQ5 (p = 0.865)**
+
+```{r , echo=FALSE}
+
+wilcox.test(part_imc ~ Asthma, data = Data.socio)
+
+```
+
+**Dx asthme enfance (p = 0.041)**
+
+```{r , echo=FALSE}
+
+CrossTable(Data.socio$Asthma, Data.socio$his_diag_enf,fisher = T)
+
+```
+
+**Crise d'asthme pendant cette période (p = 1)**
+
+```{r , echo=FALSE}
+
+CrossTable(Data.socio$Asthma, Data.socio$his_crises,fisher = T)
+
+```
+
+
+# Empreinte carbone totale durant le délai d’attente {.tabset}
+
+## Échantillon complet (n = 53)
+
+```{r , echo=FALSE}
+
+Data.socio[,c(25,28,26,29)] %>%
+  dataxray::make_xray() %>%
+  dataxray::view_xray(elementId = 3)
+
+```
+
+## Selon le groupe (Asthme n = 10; Non-asthme n = 43)
+
+```{r , echo=FALSE}
+
+Data.socio[,c(22,25,28,26,29)] %>%
+  dataxray::make_xray(by = "Asthma") %>%
+  dataxray::view_xray(elementId = 4)
+
+```
+
+## Comparaison empreinte carbone
+
+**Empreinte carbon total (p = 0.156) **
+
+```{r , echo=FALSE}
+
+wilcox.test(Total_empreinte_carbon ~ Asthma, data = Data.socio)
+
+```
+
+**Empreinte carbon total annualisé (p = 0.092)**
+
+```{r , echo=FALSE}
+
+wilcox.test(Total_empreinte_carbon_annual ~ Asthma, data = Data.socio)
+
+```
+
+## Total empreinte carbone par groupe
+
+```{r , echo=FALSE}
+
+Data.asthma <- Data.socio %>%
+  filter(Asthma == "Asthma")
+
+Data.Nasthma <- Data.socio %>%
+  filter(Asthma == "Non-asthma")
+
+print("Total empreinte carbone - Échantillon totale :")
+
+sum(Data.socio$Total_empreinte_carbon)
+
+print("Total empreinte carbone - Groupe asthme:")
+
+sum(Data.asthma$Total_empreinte_carbon)
+
+print("Total empreinte carbone - Groupe non-asthme :")
+
+sum(Data.Nasthma$Total_empreinte_carbon)
+
+```
+
+
+
+# Extrapolation des données  {.tabset}
+
+## Métacholine (n = 1314)
+
+### Évitable
+
+```{r , echo=FALSE}
+
+sum.function <- function(x, index) {
+  d <- x[index]     
+  return(sum(d,na.rm=T)     )  
+}
+
+```
+
+```{r , echo=FALSE}
+
+set.seed(2134)
+
+Data.Nasthma.ex <- as.data.frame(sample(c(Data.Nasthma$ID),1066,replace = T))
+
+Data.Nasthma.ex <- Data.Nasthma.ex %>%
+  rename( ID = `sample(c(Data.Nasthma$ID), 1066, replace = T)`)
+
+Data.Nasthma.ex <- merge(Data.Nasthma.ex,Data.Nasthma[,c(1,26)], by = "ID",all.x = T)
+
+BootDist <- boot(data = Data.Nasthma.ex$Total_empreinte_carbon, statistic = sum.function, R=10000)
+
+print("Extrapolated total generated and 95% C.I. :")
+
+sum(Data.Nasthma.ex$Total_empreinte_carbon)
+
+confint( BootDist, level=.95, type='perc')
+
+```
+
+### Non-évitable
+
+```{r , echo=FALSE}
+
+set.seed(213432)
+
+Data.asthma.ex <- as.data.frame(sample(c(Data.asthma$ID),248,replace = T))
+
+Data.asthma.ex <- Data.asthma.ex %>%
+  rename( ID = `sample(c(Data.asthma$ID), 248, replace = T)` )
+
+Data.asthma.ex <- merge(Data.asthma.ex,Data.asthma[,c(1,26)], by = "ID",all.x = T)
+
+BootDist <- boot(data = Data.asthma.ex$Total_empreinte_carbon, statistic = sum.function, R=10000)
+
+print("Extrapolated total generated and 95% C.I. :")
+
+sum(Data.asthma.ex$Total_empreinte_carbon)
+
+confint( BootDist, level=.95, type='perc')
+
+```
+
+
+## Spiro + méthacholine  (n = 1449)
+
+
+### Évitable
+
+
+```{r , echo=FALSE}
+
+set.seed(21378784)
+
+Data.Nasthma.ex <- as.data.frame(sample(c(Data.Nasthma$ID),1176,replace = T))
+
+Data.Nasthma.ex <- Data.Nasthma.ex %>%
+  rename( ID = `sample(c(Data.Nasthma$ID), 1176, replace = T)`)
+
+Data.Nasthma.ex <- merge(Data.Nasthma.ex,Data.Nasthma[,c(1,26)], by = "ID",all.x = T)
+
+BootDist <- boot(data = Data.Nasthma.ex$Total_empreinte_carbon, statistic = sum.function, R=10000)
+
+print("Extrapolated total generated and 95% C.I. :")
+
+sum(Data.Nasthma.ex$Total_empreinte_carbon)
+
+confint( BootDist, level=.95, type='perc')
+
+```
+
+### Non-évitable
+
+
+```{r , echo=FALSE}
+
+set.seed(21369432)
+Data.asthma.ex <- as.data.frame(sample(c(Data.asthma$ID),273,replace = T))
+
+Data.asthma.ex <- Data.asthma.ex %>%
+  rename( ID = `sample(c(Data.asthma$ID), 273, replace = T)` )
+
+Data.asthma.ex <- merge(Data.asthma.ex,Data.asthma[,c(1,26)], by = "ID",all.x = T)
+
+BootDist <- boot(data = Data.asthma.ex$Total_empreinte_carbon, statistic = sum.function, R=10000)
+
+print("Extrapolated total generated and 95% C.I. :")
+
+sum(Data.asthma.ex$Total_empreinte_carbon)
+
+confint( BootDist, level=.95, type='perc')
+
+```
+
+
+## Giga-extrapolation  (n = 48.000)
+
+
+### Évitable
+
+```{r , echo=FALSE}
+
+set.seed(45784)
+
+Data.Nasthma.ex <- as.data.frame(sample(c(Data.Nasthma$ID),38943,replace = T))
+
+Data.Nasthma.ex <- Data.Nasthma.ex %>%
+  rename( ID = `sample(c(Data.Nasthma$ID), 38943, replace = T)`)
+
+Data.Nasthma.ex <- merge(Data.Nasthma.ex,Data.Nasthma[,c(1,26)], by = "ID",all.x = T)
+
+BootDist <- boot(data = Data.Nasthma.ex$Total_empreinte_carbon, statistic = sum.function, R=10000)
+
+print("Extrapolated total generated and 95% C.I. :")
+
+sum(Data.Nasthma.ex$Total_empreinte_carbon)
+
+confint( BootDist, level=.95, type='perc')
+
+```
+
+### Non-évitable
+
+
+```{r , echo=FALSE}
+
+set.seed(67432)
+Data.asthma.ex <- as.data.frame(sample(c(Data.asthma$ID),9056,replace = T))
+
+Data.asthma.ex <- Data.asthma.ex %>%
+  rename( ID = `sample(c(Data.asthma$ID), 9056, replace = T)` )
+
+Data.asthma.ex <- merge(Data.asthma.ex,Data.asthma[,c(1,26)], by = "ID",all.x = T)
+
+BootDist <- boot(data = Data.asthma.ex$Total_empreinte_carbon, statistic = sum.function, R=10000)
+
+print("Extrapolated total generated and 95% C.I. :")
+
+sum(Data.asthma.ex$Total_empreinte_carbon)
+
+confint( BootDist, level=.95, type='perc')
+
+```
+
+
+# Analyse exploratoire stratifiant l’empreinte carbone selon non-asthme et asthme  {.tabset}
+
+## Asthme
+
+```{r , echo=FALSE}
+
+Data.asthma[,c(23,26,29)] %>%
+  dataxray::make_xray(by = "StrataT2") %>%
+  dataxray::view_xray(elementId = 5)
+
+```
+
+## Non-asthme
+
+```{r , echo=FALSE}
+
+Data.Nasthma[,c(23,26,29)] %>%
+  dataxray::make_xray(by = "StrataT2") %>%
+  dataxray::view_xray(elementId = 6)
+
+```
+
+
+# Scénario alternatif substitution poudre sèche {.tabset}
+
+## Empreinte carbone totale durant le délai d’attente {.tabset}
+
+### Échantillon complet (n = 53)
+
+```{r , echo=FALSE}
+
+Data.socio[,c(27,30)] %>%
+  dataxray::make_xray() %>%
+  dataxray::view_xray(elementId = 7)
+
+```
+
+### Selon le groupe (Asthme n = 10; Non-asthme n = 43)
+
+```{r , echo=FALSE}
+
+Data.socio[,c(22,27,30)] %>%
+  dataxray::make_xray(by = "Asthma") %>%
+  dataxray::view_xray(elementId = 8)
+
+```
+
+### Total empreinte carbone par groupe
+
+```{r , echo=FALSE}
+
+print("Total empreinte carbone - Échantillon totale :")
+
+sum(Data.socio$Total_empreinte_carbon_v2)
+
+print("Total empreinte carbone - Groupe asthme:")
+
+sum(Data.asthma$Total_empreinte_carbon_v2)
+
+print("Total empreinte carbone - Groupe non-asthme :")
+
+sum(Data.Nasthma$Total_empreinte_carbon_v2)
+
+```
+
+
+## Extrapolation des données  {.tabset}
+
+### Métacholine (n = 1314)
+
+#### Évitable
+
+
+```{r , echo=FALSE}
+
+set.seed(213454)
+
+Data.Nasthma.ex <- as.data.frame(sample(c(Data.Nasthma$ID),1066,replace = T))
+
+Data.Nasthma.ex <- Data.Nasthma.ex %>%
+  rename( ID = `sample(c(Data.Nasthma$ID), 1066, replace = T)`)
+
+Data.Nasthma.ex <- merge(Data.Nasthma.ex,Data.Nasthma[,c(1,27)], by = "ID",all.x = T)
+
+BootDist <- boot(data = Data.Nasthma.ex$Total_empreinte_carbon_v2, statistic = sum.function, R=10000)
+
+print("Extrapolated total generated and 95% C.I. :")
+
+sum(Data.Nasthma.ex$Total_empreinte_carbon_v2)
+
+confint( BootDist, level=.95, type='perc')
+
+```
+
+#### Non-évitable
+
+```{r , echo=FALSE}
+
+set.seed(21346532)
+
+Data.asthma.ex <- as.data.frame(sample(c(Data.asthma$ID),248,replace = T))
+
+Data.asthma.ex <- Data.asthma.ex %>%
+  rename( ID = `sample(c(Data.asthma$ID), 248, replace = T)` )
+
+Data.asthma.ex <- merge(Data.asthma.ex,Data.asthma[,c(1,27)], by = "ID",all.x = T)
+
+BootDist <- boot(data = Data.asthma.ex$Total_empreinte_carbon_v2, statistic = sum.function, R=10000)
+
+print("Extrapolated total generated and 95% C.I. :")
+
+sum(Data.asthma.ex$Total_empreinte_carbon_v2)
+
+confint( BootDist, level=.95, type='perc')
+
+```
+
+
+### Spiro + méthacholine  (n = 1449)
+
+
+#### Évitable
+
+
+```{r , echo=FALSE}
+
+set.seed(213745784)
+
+Data.Nasthma.ex <- as.data.frame(sample(c(Data.Nasthma$ID),1176,replace = T))
+
+Data.Nasthma.ex <- Data.Nasthma.ex %>%
+  rename( ID = `sample(c(Data.Nasthma$ID), 1176, replace = T)`)
+
+Data.Nasthma.ex <- merge(Data.Nasthma.ex,Data.Nasthma[,c(1,27)], by = "ID",all.x = T)
+
+BootDist <- boot(data = Data.Nasthma.ex$Total_empreinte_carbon_v2, statistic = sum.function, R=10000)
+
+print("Extrapolated total generated and 95% C.I. :")
+
+sum(Data.Nasthma.ex$Total_empreinte_carbon_v2)
+
+confint( BootDist, level=.95, type='perc')
+
+```
+
+#### Non-évitable
+
+
+```{r , echo=FALSE}
+
+set.seed(2136865932)
+
+Data.asthma.ex <- as.data.frame(sample(c(Data.asthma$ID),273,replace = T))
+
+Data.asthma.ex <- Data.asthma.ex %>%
+  rename( ID = `sample(c(Data.asthma$ID), 273, replace = T)` )
+
+Data.asthma.ex <- merge(Data.asthma.ex,Data.asthma[,c(1,27)], by = "ID",all.x = T)
+
+BootDist <- boot(data = Data.asthma.ex$Total_empreinte_carbon_v2, statistic = sum.function, R=10000)
+
+print("Extrapolated total generated and 95% C.I. :")
+
+sum(Data.asthma.ex$Total_empreinte_carbon_v2)
+
+confint( BootDist, level=.95, type='perc')
+
+```
+
+
+### Giga-extrapolation  (n = 48.000)
+
+
+#### Évitable
+
+```{r , echo=FALSE}
+
+set.seed(451784)
+
+Data.Nasthma.ex <- as.data.frame(sample(c(Data.Nasthma$ID),38943,replace = T))
+
+Data.Nasthma.ex <- Data.Nasthma.ex %>%
+  rename( ID = `sample(c(Data.Nasthma$ID), 38943, replace = T)`)
+
+Data.Nasthma.ex <- merge(Data.Nasthma.ex,Data.Nasthma[,c(1,27)], by = "ID",all.x = T)
+
+BootDist <- boot(data = Data.Nasthma.ex$Total_empreinte_carbon_v2, statistic = sum.function, R=10000)
+
+print("Extrapolated total generated and 95% C.I. :")
+
+sum(Data.Nasthma.ex$Total_empreinte_carbon_v2)
+
+confint( BootDist, level=.95, type='perc')
+
+```
+
+#### Non-évitable
+
+```{r , echo=FALSE}
+
+set.seed(617432)
+Data.asthma.ex <- as.data.frame(sample(c(Data.asthma$ID),9056,replace = T))
+
+Data.asthma.ex <- Data.asthma.ex %>%
+  rename( ID = `sample(c(Data.asthma$ID), 9056, replace = T)` )
+
+Data.asthma.ex <- merge(Data.asthma.ex,Data.asthma[,c(1,27)], by = "ID",all.x = T)
+
+BootDist <- boot(data = Data.asthma.ex$Total_empreinte_carbon_v2, statistic = sum.function, R=10000)
+
+print("Extrapolated total generated and 95% C.I. :")
+
+sum(Data.asthma.ex$Total_empreinte_carbon_v2)
+
+confint( BootDist, level=.95, type='perc')
+
+```
+
