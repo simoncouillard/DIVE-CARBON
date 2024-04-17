@@ -1,7 +1,7 @@
 ---
-title: 'Analyses statistiques : Lauranne Pouliot <br><br>'
-author: "Numéro de référence : 1027 <br><br> Par : Samuel Lemaire-Paquette, statisticien"
-date: ' Dernière mise à jour : `r Sys.Date()`<br><br>'
+title: 'Statistical analysis : Lauranne Pouliot <br><br>'
+author: "Reference : 1027 <br><br> Par : Samuel Lemaire-Paquette, statistician"
+date: ' Last updated : `r Sys.Date()`<br><br>'
 output:
   html_document:
     theme: united
@@ -10,7 +10,7 @@ output:
     number_sections: false
   pdf_document:
     toc: true
-subtitle: "Projet : DIVE - Carbon <br>"
+subtitle: "Project : DIVE - Carbon <br>"
 ---
 
 ```{r setup, include=FALSE}
@@ -65,6 +65,8 @@ Data.socio <- read_excel("2024_03_23_DataClean.xlsx", sheet = "SocioDemo")
 Data.inh <- read_excel("2024_03_23_DataClean.xlsx", sheet = "Inhalateur")
 Data.carbon <- read_excel("2024_03_23_DataClean.xlsx", sheet = "Carbon")
 
+# Manual exclusion
+
 Data.socio <- Data.socio %>%
   filter(ID != 30)
 
@@ -79,7 +81,7 @@ Data.socio <- Data.socio %>%
   group_by(ID) %>%
   mutate( Asthma = ifelse(ea_dp_20<= 200,1,0),
           StrataT2 = ifelse( ea_feno_niox < 25 & ea_fsc_eos_val < 0.15,0,1),
-          his_crise_severe = ifelse( is.na(his_crise_corti)==T,NA, sum(his_crise_corti,his_crise_combi, na.rm=T)              ))
+          his_crise_severe = ifelse( is.na(his_crise_corti)==T,NA, sum(his_crise_corti,his_crise_combi, na.rm=T)))
 
 Data.inh.long <- reshape(transform(Data.inh, idnew = seq_along(ID)), varying=list(c("Rx1","Rx2","Rx3","Rx4"),
                                    c("Nbr_Rx1","Nbr_Rx2","Nbr_Rx3","Nbr_Rx4")),
@@ -169,22 +171,31 @@ Data.socio$his_crises <- as.factor(Data.socio$his_crises)
 
 ```
 
-# Statistique descriptive - Sociodémo {.tabset}
+```{r function, echo=FALSE}
 
-**Instructions pour les tableaux :**
+sum.function <- function(x, index) {
+  d <- x[index]     
+  return(sum(d,na.rm=T)     )  
+}
 
-Les statistiques descriptives sont présentées dans les tableaux. L'ensemble des informations pertinentes devraient se trouver à l'intérieur.
+```
 
-* Type : Type de variable (Continu ou nominal)
-* Name-Label : Nom de la variable.  
-* Observed : Nombre de patients avec une valeur non-manquante.
-* Missing : Nombre de patients avec une valeur manquante.
-* Distinct : Nombre de modalités (valeurs observées) différentes dans la variable.
-* Figure : Distribution de la variable. 
+# Descriptive - Sociodemographic {.tabset}
 
-Pour accéder à l'information, cliquer sur l'icône "Expand/collapse all". Les informations descriptives devraient apparaître sous chaque variable. Les fréquences et pourcentages de chaque modalité seront présentés pour les variables nominales. Les moyennes et les écart-types (GMD = forme robuste d'écart-type) et les médianes [écart-interquartiles] sont présentés pour les variables continues. Il est recommandé d'évaluer visuellement la normalité à l'aide de l'histogramme au bout de la rangée. Si on semble observer une distribution normale, il est recommandé de présenter Moyenne(GMD), sinon median[$Q_{25}$-$Q_{75}$].
+**Table instruction :**
 
-## Échantillon complet (n = 53)
+Descriptive statistics are presented in the tables.
+
+* Type: Type of variable (Continuous or Nominal)
+* Name-Label: Variable name. 
+* Observed: Number of patients with a non-missing value.
+* Missing: Number of patients with a missing value.
+* Distinct: Number of different modalities (observed values) in the variable.
+* Figure: Variable distribution. 
+
+To access the information, click on the "Expand/collapse all" icon. Descriptive information should appear below each variable. Frequencies and percentages of each modality will be presented for categorical variables. Means and standard deviations (GMD = robust form of standard deviation) and medians [interquartile range] are presented for continuous variables. It is recommended to visually assess normality using the histogram at the end of the row. If a normal distribution appears to be observed, we recommend presenting Mean(GMD), otherwise median[$Q_{25}$-$Q_{75}$].
+
+## Complete sample (n = 53)
 
 ```{r , echo=FALSE}
 
@@ -194,7 +205,7 @@ Data.socio[,c(5,23,3,4,6,7,14,15,16,24,19,20,13,21,8,2,22,9,10,11)] %>%
 
 ```
 
-## Selon le groupe (Asthme n = 10; Non-asthme n = 43)
+## By groupe (Asthma n = 10; Non-asthma n = 43)
 
 ```{r , echo=FALSE}
 
@@ -204,10 +215,9 @@ Data.socio[,c(22,5,23,3,4,6,7,14,15,16,24,19,20,13,21,8,2,9,10,11)] %>%
 
 ```
 
+# Group comparison
 
-# Comparaison des groupes
-
-**Âge (p = 0.122)**
+**Age (p = 0.122)**
 
 ```{r , echo=FALSE}
 
@@ -215,7 +225,7 @@ wilcox.test(part_age ~ Asthma, data = Data.socio)
 
 ```
 
-**IMC (p = 0.865)**
+**BMI (p = 0.865)**
 
 ```{r , echo=FALSE}
 
@@ -223,7 +233,7 @@ wilcox.test(part_imc ~ Asthma, data = Data.socio)
 
 ```
 
-**Sexe (p = 1)**
+**Sex (p = 1)**
 
 ```{r , echo=FALSE}
 
@@ -231,7 +241,7 @@ CrossTable(Data.socio$Asthma, Data.socio$part_sexe,fisher = T)
 
 ```
 
-**Tabagisme (p = 0.08)**
+**Smoker (p = 0.08)**
 
 ```{r , echo=FALSE}
 
@@ -239,7 +249,7 @@ CrossTable(Data.socio$Asthma, Data.socio$consom_tabac,fisher = T)
 
 ```
 
-**VEMS observée pré-BD % (p = 0.031 )**
+**VEMS observed pre-BD % (p = 0.031 )**
 
 ```{r , echo=FALSE}
 
@@ -247,7 +257,7 @@ wilcox.test(fp_vems_obs_pre_pour ~ Asthma, data = Data.socio)
 
 ```
 
-**VEMS/CVF observée pré-BD (p = 0.568)**
+**VEMS/CVF observed pre-BD (p = 0.568)**
 
 ```{r , echo=FALSE}
 
@@ -271,7 +281,7 @@ wilcox.test(ea_fsc_eos_val ~ Asthma, data = Data.socio)
 
 ```
 
-**Score ACQ5 (p = 0.865)**
+**ACQ5 score (p = 0.865)**
 
 ```{r , echo=FALSE}
 
@@ -279,7 +289,7 @@ wilcox.test(part_imc ~ Asthma, data = Data.socio)
 
 ```
 
-**Dx asthme enfance (p = 0.041)**
+**Childhood asthma diagnosis (p = 0.041)**
 
 ```{r , echo=FALSE}
 
@@ -287,7 +297,7 @@ CrossTable(Data.socio$Asthma, Data.socio$his_diag_enf,fisher = T)
 
 ```
 
-**Crise d'asthme pendant cette période (p = 1)**
+**Asthma attacks during this period (p = 1)**
 
 ```{r , echo=FALSE}
 
@@ -295,10 +305,9 @@ CrossTable(Data.socio$Asthma, Data.socio$his_crises,fisher = T)
 
 ```
 
+# Total carbon footprint during waiting period {.tabset}
 
-# Empreinte carbone totale durant le délai d’attente {.tabset}
-
-## Échantillon complet (n = 53)
+## Complete sample (n = 53)
 
 ```{r , echo=FALSE}
 
@@ -308,7 +317,7 @@ Data.socio[,c(25,28,26,29)] %>%
 
 ```
 
-## Selon le groupe (Asthme n = 10; Non-asthme n = 43)
+## By group (Asthma n = 10; Non-asthma n = 43)
 
 ```{r , echo=FALSE}
 
@@ -318,9 +327,9 @@ Data.socio[,c(22,25,28,26,29)] %>%
 
 ```
 
-## Comparaison empreinte carbone
+## Carbon footprint comparison
 
-**Empreinte carbon total (p = 0.156) **
+**Total Carbon footprint (p = 0.156) **
 
 ```{r , echo=FALSE}
 
@@ -328,7 +337,7 @@ wilcox.test(Total_empreinte_carbon ~ Asthma, data = Data.socio)
 
 ```
 
-**Empreinte carbon total annualisé (p = 0.092)**
+**Total annualized carbon footprint (p = 0.092)**
 
 ```{r , echo=FALSE}
 
@@ -336,7 +345,7 @@ wilcox.test(Total_empreinte_carbon_annual ~ Asthma, data = Data.socio)
 
 ```
 
-## Total empreinte carbone par groupe
+## Total carbon footprint by group
 
 ```{r , echo=FALSE}
 
@@ -346,36 +355,37 @@ Data.asthma <- Data.socio %>%
 Data.Nasthma <- Data.socio %>%
   filter(Asthma == "Non-asthma")
 
-print("Total empreinte carbone - Échantillon totale :")
+print("Total carbon footprint - Total sample :")
 
 sum(Data.socio$Total_empreinte_carbon)
 
-print("Total empreinte carbone - Groupe asthme:")
+BootDist <- boot(data = Data.socio$Total_empreinte_carbon, statistic = sum.function, R=10000)
+
+confint( BootDist, level=.95, type='perc')
+
+print("Total carbon footprint - Asthma group :")
 
 sum(Data.asthma$Total_empreinte_carbon)
 
-print("Total empreinte carbone - Groupe non-asthme :")
+BootDist <- boot(data = Data.asthma$Total_empreinte_carbon, statistic = sum.function, R=10000)
+
+confint( BootDist, level=.95, type='perc')
+
+print("Total carbon footprint - Non-asthma group :")
 
 sum(Data.Nasthma$Total_empreinte_carbon)
 
-```
+BootDist <- boot(data = Data.Nasthma$Total_empreinte_carbon, statistic = sum.function, R=10000)
 
-
-
-# Extrapolation des données  {.tabset}
-
-## Métacholine (n = 1314)
-
-### Évitable
-
-```{r , echo=FALSE}
-
-sum.function <- function(x, index) {
-  d <- x[index]     
-  return(sum(d,na.rm=T)     )  
-}
+confint( BootDist, level=.95, type='perc')
 
 ```
+
+# Extrapolating data  {.tabset}
+
+## Metacholine (n = 1314)
+
+### Avoidable
 
 ```{r , echo=FALSE}
 
@@ -398,7 +408,7 @@ confint( BootDist, level=.95, type='perc')
 
 ```
 
-### Non-évitable
+### Non-avoidable
 
 ```{r , echo=FALSE}
 
@@ -421,12 +431,9 @@ confint( BootDist, level=.95, type='perc')
 
 ```
 
+## Spiro + metacholine  (n = 1449)
 
-## Spiro + méthacholine  (n = 1449)
-
-
-### Évitable
-
+### Avoidable
 
 ```{r , echo=FALSE}
 
@@ -449,8 +456,7 @@ confint( BootDist, level=.95, type='perc')
 
 ```
 
-### Non-évitable
-
+### Non-avoidable
 
 ```{r , echo=FALSE}
 
@@ -472,11 +478,9 @@ confint( BootDist, level=.95, type='perc')
 
 ```
 
+## Larger extrapolation (n = 48.000)
 
-## Giga-extrapolation  (n = 48.000)
-
-
-### Évitable
+### Avoidable
 
 ```{r , echo=FALSE}
 
@@ -499,8 +503,7 @@ confint( BootDist, level=.95, type='perc')
 
 ```
 
-### Non-évitable
-
+### Non-avoidable
 
 ```{r , echo=FALSE}
 
@@ -522,10 +525,9 @@ confint( BootDist, level=.95, type='perc')
 
 ```
 
+# Exploratory analysis stratifying carbon footprint by non-asthma and asthma  {.tabset}
 
-# Analyse exploratoire stratifiant l’empreinte carbone selon non-asthme et asthme  {.tabset}
-
-## Asthme
+## Asthma
 
 ```{r , echo=FALSE}
 
@@ -535,7 +537,7 @@ Data.asthma[,c(23,26,29)] %>%
 
 ```
 
-## Non-asthme
+## Non-asthma
 
 ```{r , echo=FALSE}
 
@@ -546,11 +548,11 @@ Data.Nasthma[,c(23,26,29)] %>%
 ```
 
 
-# Scénario alternatif substitution poudre sèche {.tabset}
+# Alternative dry powder substitution scenario {.tabset}
 
-## Empreinte carbone totale durant le délai d’attente {.tabset}
+## Total carbon footprint during waiting period {.tabset}
 
-### Échantillon complet (n = 53)
+### Complete sample (n = 53)
 
 ```{r , echo=FALSE}
 
@@ -560,7 +562,7 @@ Data.socio[,c(27,30)] %>%
 
 ```
 
-### Selon le groupe (Asthme n = 10; Non-asthme n = 43)
+### By group (Asthma n = 10; Non-asthma n = 43)
 
 ```{r , echo=FALSE}
 
@@ -570,31 +572,42 @@ Data.socio[,c(22,27,30)] %>%
 
 ```
 
-### Total empreinte carbone par groupe
+### Total carbon footprint by group
 
 ```{r , echo=FALSE}
 
-print("Total empreinte carbone - Échantillon totale :")
+print("Total carbon footprint - Total sample :")
 
 sum(Data.socio$Total_empreinte_carbon_v2)
 
-print("Total empreinte carbone - Groupe asthme:")
+BootDist <- boot(data = Data.socio$Total_empreinte_carbon_v2, statistic = sum.function, R=10000)
+
+confint( BootDist, level=.95, type='perc')
+
+print("Total carbon footprint - Asthma group :")
 
 sum(Data.asthma$Total_empreinte_carbon_v2)
 
-print("Total empreinte carbone - Groupe non-asthme :")
+BootDist <- boot(data = Data.asthma$Total_empreinte_carbon_v2, statistic = sum.function, R=10000)
+
+confint( BootDist, level=.95, type='perc')
+
+print("Total carbon footprint - Non-asthma group :")
 
 sum(Data.Nasthma$Total_empreinte_carbon_v2)
+
+BootDist <- boot(data = Data.Nasthma$Total_empreinte_carbon_v2, statistic = sum.function, R=10000)
+
+confint( BootDist, level=.95, type='perc')
 
 ```
 
 
-## Extrapolation des données  {.tabset}
+## Extrapolating data  {.tabset}
 
-### Métacholine (n = 1314)
+### Metacholine (n = 1314)
 
-#### Évitable
-
+#### Avoidable
 
 ```{r , echo=FALSE}
 
@@ -617,7 +630,7 @@ confint( BootDist, level=.95, type='perc')
 
 ```
 
-#### Non-évitable
+#### Non-avoidable
 
 ```{r , echo=FALSE}
 
@@ -640,12 +653,9 @@ confint( BootDist, level=.95, type='perc')
 
 ```
 
+### Spiro + metacholine  (n = 1449)
 
-### Spiro + méthacholine  (n = 1449)
-
-
-#### Évitable
-
+#### Avoidable
 
 ```{r , echo=FALSE}
 
@@ -668,8 +678,7 @@ confint( BootDist, level=.95, type='perc')
 
 ```
 
-#### Non-évitable
-
+#### Non-avoidable
 
 ```{r , echo=FALSE}
 
@@ -692,11 +701,9 @@ confint( BootDist, level=.95, type='perc')
 
 ```
 
+### Larger extrapolation  (n = 48.000)
 
-### Giga-extrapolation  (n = 48.000)
-
-
-#### Évitable
+#### Avoidable
 
 ```{r , echo=FALSE}
 
@@ -719,7 +726,7 @@ confint( BootDist, level=.95, type='perc')
 
 ```
 
-#### Non-évitable
+#### Non-avoidable
 
 ```{r , echo=FALSE}
 
